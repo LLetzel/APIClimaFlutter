@@ -2,63 +2,19 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-// Traduções de clima
-const Map<String, String> traducaoClima = {
-  'thunderstorm with light rain': 'trovoada com chuva fraca',
-  'thunderstorm with rain': 'trovoada com chuva',
-  'thunderstorm with heavy rain': 'trovoada com chuva forte',
-  'light thunderstorm': 'trovoada leve',
-  'thunderstorm': 'trovoada',
-  'heavy thunderstorm': 'forte tempestade',
-  'ragged thunderstorm': 'tempestade irregular',
-  'thunderstorm with light drizzle': 'trovoada com leve garoa',
-  'thunderstorm with drizzle': 'trovoada com garoa',
-  'thunderstorm with heavy drizzle': 'trovoada com forte garoa',
-  'light intensity drizzle': 'chuvisco de baixa intensidade',
-  'drizzle': 'chuvisco',
-  'heavy intensity drizzle': 'chuvisco de forte intensidade',
-  'light intensity drizzle rain': 'chuvisco de baixa intensidade com chuva',
-  'drizzle rain': 'chuvisco exponencial',
-  'heavy intensity drizzle rain': 'chuva forte com garoa',
-  'shower rain and drizzle': 'chuva e garoa',
-  'shower drizzle': 'chuvisco forte',
-  'light rain': 'chuva leve',
-  'clear sky': 'céu limpo',
-  'few clouds': 'poucas nuvens',
-  'scattered clouds': 'nuvens dispersas',
-  'broken clouds': 'nuvens separadas',
-  'overcast clouds': 'muitas nuvens',
-  'moderate rain': 'chuva moderada',
-  'heavy intensity rain': 'chuva de forte intensidade',
-  'very heavy rain': 'chuva muito forte',
-  'extreme rain': 'chuva extrema',
-  'freezing rain': 'chuva congelante',
-  'light intensity shower rain': 'banho de chuva de fraca intensidade',
-  'shower rain': 'banho de chuva',
-  'heavy intensity shower rain': 'banho de chuva de intensidade pesada',
-  'ragged shower rain': 'banho de chuva irregular',
-  'light snow': 'leve neve',
-  'snow': 'neve',
-  'heavy snow': 'neve pesada',
-  'sleet': 'granizo',
-  'light shower sleet': 'neve com granizo leve',
-  'shower sleet': 'neve com granizo',
-  'light rain and snow': 'chuva fraca e neve',
-  'rain and snow': 'chuva e neve',
-  'light shower snow': 'chuva leve de neve',
-  'shower snow': 'chuva de neve',
-  'heavy shower snow': 'forte chuva de neve',
-  'mist': 'névoa',
-  'smoke': 'fumaça',
-  'haze': 'neblina',
-  'sand/dust whirls': 'redemoinhos de areia/poeira',
-  'fog': 'névoa',
-  'sand': 'areia',
-  'dust': 'poeira',
-  'volcanic ash': 'cinza vulcânica',
-  'squalls': 'ventania',
-  'tornado': 'tornado',
+// Traduções de clima e ícones associados
+const Map<String, Map<String, dynamic>> traducaoClima = {
+  'clear sky': {'texto': 'céu limpo', 'icone': FontAwesomeIcons.sun},
+  'few clouds': {'texto': 'poucas nuvens', 'icone': FontAwesomeIcons.cloudSun},
+  'scattered clouds': {'texto': 'nuvens dispersas', 'icone': FontAwesomeIcons.cloud},
+  'broken clouds': {'texto': 'nuvens separadas', 'icone': FontAwesomeIcons.cloud},
+  'shower rain': {'texto': 'banho de chuva', 'icone': FontAwesomeIcons.cloudRain},
+  'rain': {'texto': 'chuva', 'icone': FontAwesomeIcons.cloudShowersHeavy},
+  'thunderstorm': {'texto': 'trovoada', 'icone': FontAwesomeIcons.bolt},
+  'snow': {'texto': 'neve', 'icone': FontAwesomeIcons.snowflake},
+  'mist': {'texto': 'névoa', 'icone': FontAwesomeIcons.smog},
 };
 
 class WeatherPage extends StatefulWidget {
@@ -66,16 +22,31 @@ class WeatherPage extends StatefulWidget {
   _WeatherPageState createState() => _WeatherPageState();
 }
 
-class _WeatherPageState extends State<WeatherPage> {
-  String city = "Pompeia,";
+class _WeatherPageState extends State<WeatherPage> with SingleTickerProviderStateMixin {
+  String city = "Pompeia";
   String apiKey = "";
   String weather = "Carregando...";
   double temperature = 0;
+  IconData weatherIcon = FontAwesomeIcons.cloud;
+  late AnimationController _controller;
+  late Animation<double> _iconAnimation;
+  bool isLoading = false;
 
   @override
   void initState() {
     super.initState();
+    _controller = AnimationController(
+      duration: const Duration(seconds: 1),
+      vsync: this,
+    );
+    _iconAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
     loadApiKey().then((_) => fetchWeather());
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   Future<void> loadApiKey() async {
@@ -101,6 +72,10 @@ class _WeatherPageState extends State<WeatherPage> {
       return;
     }
 
+    setState(() {
+      isLoading = true;
+    });
+
     final url =
         "https://api.openweathermap.org/data/2.5/weather?q=$city&appid=$apiKey&units=metric";
     try {
@@ -108,13 +83,17 @@ class _WeatherPageState extends State<WeatherPage> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final weatherDescription = data["weather"][0]["description"];
-        final translatedWeather =
-            traducaoClima[weatherDescription] ?? weatherDescription;
+        final translatedWeather = traducaoClima[weatherDescription]?['texto'] ?? "Clima desconhecido";
+        final translatedIcon = traducaoClima[weatherDescription]?['icone'] ?? FontAwesomeIcons.cloud;
 
         setState(() {
           weather = translatedWeather;
           temperature = data["main"]["temp"];
+          weatherIcon = translatedIcon;
         });
+
+        _controller.reset();
+        _controller.forward(); // Dispara a animação ao atualizar o clima
       } else {
         setState(() {
           weather = "Erro ao carregar dados da API.";
@@ -125,38 +104,127 @@ class _WeatherPageState extends State<WeatherPage> {
       setState(() {
         weather = "Erro ao se conectar.";
       });
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
     }
+  }
+
+  void updateCity(String newCity) {
+    setState(() {
+      city = newCity;
+    });
+    fetchWeather();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("App de Clima"),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              "Cidade: $city",
-              style: TextStyle(fontSize: 24),
-            ),
-            Text(
-              "Clima: $weather",
-              style: TextStyle(fontSize: 24),
-            ),
-            Text(
-              "Temperatura: ${temperature.toStringAsFixed(1)}°C",
-              style: TextStyle(fontSize: 24),
-            ),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: fetchWeather,
-              child: Text("Atualizar"),
-            ),
-          ],
+        title: const Text(
+          "App de Clima",
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
         ),
+        backgroundColor: Colors.blueAccent,
+        elevation: 5,
+      ),
+      body: Stack(
+        children: [
+          // Fundo com gradiente
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue, Colors.lightBlueAccent],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
+          // Conteúdo principal
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  ScaleTransition(
+                    scale: _iconAnimation,
+                    child: Icon(
+                      weatherIcon,
+                      color: Colors.white,
+                      size: 100,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    onSubmitted: updateCity,
+                    decoration: InputDecoration(
+                      hintText: "Digite a cidade",
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    "Cidade: $city",
+                    style: const TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  AnimatedOpacity(
+                    opacity: isLoading ? 0.5 : 1.0,
+                    duration: const Duration(milliseconds: 500),
+                    child: Text(
+                      "Clima: $weather",
+                      style: const TextStyle(
+                        fontSize: 22,
+                        color: Colors.white70,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  AnimatedOpacity(
+                    opacity: isLoading ? 0.5 : 1.0,
+                    duration: const Duration(milliseconds: 500),
+                    child: Text(
+                      "Temperatura: ${temperature.toStringAsFixed(1)}°C",
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  ElevatedButton.icon(
+                    onPressed: fetchWeather,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text("Atualizar"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.blue,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 10),
+                      textStyle: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
